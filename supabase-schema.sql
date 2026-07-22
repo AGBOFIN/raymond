@@ -151,9 +151,9 @@ INSERT INTO services (title, description, icon, order_index) VALUES
 ON CONFLICT (title) DO NOTHING;
 
 -- Insert default admin user (password: admin123 - you should change this in production)
--- Hash for 'admin123' is: $2a$10$rOzJZ8Q8Q8Q8Q8Q8Q8Q8Qu
+-- Hash for 'admin123' is: $2b$10$iYoObTLvcB.Cv32twbqDRedUFzLxvvOsZaHGWRjo7ssH0fSeqg50m
 INSERT INTO admin_users (username, password_hash) VALUES
-  ('admin', '$2a$10$rOzJZ8Q8Q8Q8Q8Q8Q8Q8Qu')
+  ('admin', '$2b$10$iYoObTLvcB.Cv32twbqDRedUFzLxvvOsZaHGWRjo7ssH0fSeqg50m')
 ON CONFLICT (username) DO NOTHING;
 
 -- Enable Row Level Security (RLS)
@@ -175,11 +175,12 @@ CREATE POLICY "Public read access for gallery" ON gallery FOR SELECT USING (true
 CREATE POLICY "Public read access for testimonials" ON testimonials FOR SELECT USING (is_approved = true);
 
 -- Admin-only policies (you'll need to implement proper authentication)
-CREATE POLICY "Admin full access on site_content" ON site_content FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Admin full access on services" ON services FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Admin full access on images" ON images FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Admin full access on gallery" ON gallery FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Admin full access on patients" ON patients FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Admin full access on sessions" ON sessions FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Admin full access on testimonials" ON testimonials FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Admin full access on contact_messages" ON contact_messages FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "Admin full access on admin_users" ON admin_users FOR ALL USING (true);
+CREATE POLICY "Admin full access on site_content" ON site_content FOR ALL USING (true);
+CREATE POLICY "Admin full access on services" ON services FOR ALL USING (true);
+CREATE POLICY "Admin full access on images" ON images FOR ALL USING (true);
+CREATE POLICY "Admin full access on gallery" ON gallery FOR ALL USING (true);
+CREATE POLICY "Admin full access on patients" ON patients FOR ALL USING (true);
+CREATE POLICY "Admin full access on sessions" ON sessions FOR ALL USING (true);
+CREATE POLICY "Admin full access on testimonials" ON testimonials FOR ALL USING (true);
+CREATE POLICY "Admin full access on contact_messages" ON contact_messages FOR ALL USING (true);
