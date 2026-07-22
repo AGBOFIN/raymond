@@ -1,6 +1,17 @@
 -- Supabase Database Schema for Rehab Connect
 -- Run this in your Supabase SQL Editor
 
+-- Drop existing tables in reverse dependency order
+DROP TABLE IF EXISTS testimonials CASCADE;
+DROP TABLE IF EXISTS sessions CASCADE;
+DROP TABLE IF EXISTS patients CASCADE;
+DROP TABLE IF EXISTS gallery CASCADE;
+DROP TABLE IF EXISTS images CASCADE;
+DROP TABLE IF EXISTS contact_messages CASCADE;
+DROP TABLE IF EXISTS services CASCADE;
+DROP TABLE IF EXISTS site_content CASCADE;
+DROP TABLE IF EXISTS admin_users CASCADE;
+
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
