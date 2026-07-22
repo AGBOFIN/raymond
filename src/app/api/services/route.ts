@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET() {
   try {
-    const stmt = db.prepare('SELECT * FROM services ORDER BY order_index');
-    const services = stmt.all();
+    const { data: services } = await supabase
+      .from('services')
+      .select('*')
+      .order('order_index');
     
-    return NextResponse.json(services, {
+    return NextResponse.json(services || [], {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
       },
     });
   } catch (error) {
     console.error('Error fetching services:', error);
-    // Return empty array instead of error to prevent crashes
     return NextResponse.json([], {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
@@ -31,10 +32,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Title and icon are required' }, { status: 400 });
     }
     
-    const stmt = db.prepare('INSERT INTO services (title, description, icon, order_index) VALUES (?, ?, ?, ?)');
-    const result = stmt.run(title, description, icon, order_index || 0);
+    const { data, error } = await supabase
+      .from('services')
+      .insert({ title, description, icon, order_index: order_index || 0 })
+      .select()
+      .single();
     
-    return NextResponse.json({ success: true, id: result.lastInsertRowid });
+    if (error) {
+      return NextResponse.json({ error: 'Failed to create service' }, { status: 500 });
+    }
+    
+    return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
     console.error('Error creating service:', error);
     return NextResponse.json({ error: 'Failed to create service' }, { status: 500 });
@@ -50,8 +58,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Service ID is required' }, { status: 400 });
     }
     
-    const stmt = db.prepare('UPDATE services SET title = ?, description = ?, icon = ?, order_index = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-    stmt.run(title, description, icon, order_index, id);
+    const { error } = await supabase
+      .from('services')
+      .update({ title, description, icon, order_index, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    
+    if (error) {
+      return NextResponse.json({ error: 'Failed to update service' }, { status: 500 });
+    }
     
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -69,8 +83,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Service ID is required' }, { status: 400 });
     }
     
-    const stmt = db.prepare('DELETE FROM services WHERE id = ?');
-    stmt.run(id);
+    const { error } = await supabase
+      .from('services')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      return NextResponse.json({ error: 'Failed to delete service' }, { status: 500 });
+    }
     
     return NextResponse.json({ success: true });
   } catch (error) {

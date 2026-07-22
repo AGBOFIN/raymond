@@ -2,26 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
 
-    let stmt;
+    let query = supabase
+      .from('images')
+      .select('*')
+      .order('category, order_index');
+
     if (category) {
-      stmt = db.prepare('SELECT * FROM images WHERE category = ? ORDER BY order_index');
-      const images = stmt.all(category);
-      return NextResponse.json(images);
-    } else {
-      stmt = db.prepare('SELECT * FROM images ORDER BY category, order_index');
-      const images = stmt.all();
-      return NextResponse.json(images);
+      query = query.eq('category', category);
     }
+
+    const { data: images } = await query;
+    return NextResponse.json(images || []);
   } catch (error) {
     console.error('Error fetching images:', error);
-    // Return empty array instead of error to prevent crashes
     return NextResponse.json([]);
   }
 }
@@ -70,14 +70,26 @@ export async function POST(request: NextRequest) {
 
     // Save to database
     const relativePath = `/uploads/${category}/${filename}`;
-    const stmt = db.prepare(
-      'INSERT INTO images (filename, original_name, path, category, alt_text, order_index) VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    const result = stmt.run(filename, file.name, relativePath, category, altText || null, parseInt(orderIndex) || 0);
+    const { data, error } = await supabase
+      .from('images')
+      .insert({
+        filename,
+        original_name: file.name,
+        path: relativePath,
+        category,
+        alt_text: altText || null,
+        order_index: parseInt(orderIndex) || 0
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
+    }
 
     return NextResponse.json({ 
       success: true, 
-      id: result.lastInsertRowid,
+      id: data.id,
       path: relativePath 
     });
   } catch (error) {
@@ -95,10 +107,19 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Image ID is required' }, { status: 400 });
     }
 
-    const stmt = db.prepare(
-      'UPDATE images SET alt_text = COALESCE(?, alt_text), order_index = COALESCE(?, order_index), category = COALESCE(?, category) WHERE id = ?'
-    );
-    stmt.run(altText, orderIndex, category, id);
+    const updateData: any = {};
+    if (altText !== undefined) updateData.alt_text = altText;
+    if (orderIndex !== undefined) updateData.order_index = orderIndex;
+    if (category !== undefined) updateData.category = category;
+
+    const { error } = await supabase
+      .from('images')
+      .update(updateData)
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to update image' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -117,16 +138,25 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get image info before deleting
-    const stmt = db.prepare('SELECT * FROM images WHERE id = ?');
-    const image = stmt.get(id) as any;
+    const { data: image } = await supabase
+      .from('images')
+      .select('*')
+      .eq('id', id)
+      .single();
 
     if (!image) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
 
     // Delete from database
-    const deleteStmt = db.prepare('DELETE FROM images WHERE id = ?');
-    deleteStmt.run(id);
+    const { error } = await supabase
+      .from('images')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to delete image' }, { status: 500 });
+    }
 
     // Delete file from disk
     const filepath = path.join(process.cwd(), 'public', image.path);
@@ -137,7 +167,6 @@ export async function DELETE(request: NextRequest) {
       }
     } catch (fileError) {
       console.error('Error deleting file:', fileError);
-      // Continue even if file deletion fails
     }
 
     return NextResponse.json({ success: true });

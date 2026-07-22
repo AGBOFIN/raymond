@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function PUT(
   request: NextRequest,
@@ -10,8 +10,14 @@ export async function PUT(
     const body = await request.json();
     const { is_approved } = body;
 
-    const stmt = db.prepare('UPDATE testimonials SET is_approved = ? WHERE id = ?');
-    stmt.run(is_approved ? 1 : 0, id);
+    const { error } = await supabase
+      .from('testimonials')
+      .update({ is_approved })
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to update testimonial' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -26,8 +32,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const stmt = db.prepare('DELETE FROM testimonials WHERE id = ?');
-    stmt.run(id);
+    const { error } = await supabase
+      .from('testimonials')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to delete testimonial' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

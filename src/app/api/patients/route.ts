@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,41 +9,23 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const offset = (page - 1) * limit;
 
-    let stmt;
-    let patients;
+    let query = supabase
+      .from('patients')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (search) {
-      stmt = db.prepare(`
-        SELECT * FROM patients 
-        WHERE first_name LIKE ? OR last_name LIKE ? OR phone LIKE ? OR email LIKE ?
-        ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-      `);
-      const searchPattern = `%${search}%`;
-      patients = stmt.all(searchPattern, searchPattern, searchPattern, searchPattern, limit, offset);
-    } else {
-      stmt = db.prepare('SELECT * FROM patients ORDER BY created_at DESC LIMIT ? OFFSET ?');
-      patients = stmt.all(limit, offset);
+      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
     }
 
-    // Get total count
-    let countStmt;
-    let total;
-    if (search) {
-      countStmt = db.prepare(`
-        SELECT COUNT(*) as count FROM patients 
-        WHERE first_name LIKE ? OR last_name LIKE ? OR phone LIKE ? OR email LIKE ?
-      `);
-      const searchPattern = `%${search}%`;
-      const countResult = countStmt.get(searchPattern, searchPattern, searchPattern, searchPattern) as any;
-      total = countResult.count;
-    } else {
-      countStmt = db.prepare('SELECT COUNT(*) as count FROM patients');
-      const countResult = countStmt.get() as any;
-      total = countResult.count;
+    const { data: patients, count, error } = await query;
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to fetch patients' }, { status: 500 });
     }
 
-    return NextResponse.json({ patients, total, page, limit });
+    return NextResponse.json({ patients: patients || [], total: count || 0, page, limit });
   } catch (error) {
     console.error('Error fetching patients:', error);
     return NextResponse.json({ error: 'Failed to fetch patients' }, { status: 500 });
@@ -83,24 +65,28 @@ export async function POST(request: NextRequest) {
     // Sanitize inputs to prevent XSS
     const sanitize = (input: string) => input.replace(/[<>]/g, '');
     
-    const stmt = db.prepare(`
-      INSERT INTO patients (first_name, last_name, date_of_birth, phone, email, address, emergency_contact_name, emergency_contact_phone, medical_history, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      sanitize(first_name),
-      sanitize(last_name),
-      date_of_birth || null,
-      sanitize(phone),
-      email ? sanitize(email) : null,
-      address ? sanitize(address) : null,
-      emergency_contact_name ? sanitize(emergency_contact_name) : null,
-      emergency_contact_phone ? sanitize(emergency_contact_phone) : null,
-      medical_history ? sanitize(medical_history) : null,
-      notes ? sanitize(notes) : null
-    );
+    const { data, error } = await supabase
+      .from('patients')
+      .insert({
+        first_name: sanitize(first_name),
+        last_name: sanitize(last_name),
+        date_of_birth: date_of_birth || null,
+        phone: sanitize(phone),
+        email: email ? sanitize(email) : null,
+        address: address ? sanitize(address) : null,
+        emergency_contact_name: emergency_contact_name ? sanitize(emergency_contact_name) : null,
+        emergency_contact_phone: emergency_contact_phone ? sanitize(emergency_contact_phone) : null,
+        medical_history: medical_history ? sanitize(medical_history) : null,
+        notes: notes ? sanitize(notes) : null
+      })
+      .select()
+      .single();
 
-    return NextResponse.json({ success: true, id: result.lastInsertRowid });
+    if (error) {
+      return NextResponse.json({ error: 'Failed to create patient' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
     console.error('Error creating patient:', error);
     return NextResponse.json({ error: 'Failed to create patient' }, { status: 500 });

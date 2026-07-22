@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(
   request: NextRequest,
@@ -7,10 +7,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const stmt = db.prepare('SELECT * FROM patients WHERE id = ?');
-    const patient = stmt.get(id) as any;
+    const { data: patient, error } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (!patient) {
+    if (error || !patient) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
     }
 
@@ -41,26 +44,26 @@ export async function PUT(
       notes
     } = body;
 
-    const stmt = db.prepare(`
-      UPDATE patients 
-      SET first_name = ?, last_name = ?, date_of_birth = ?, phone = ?, email = ?, 
-          address = ?, emergency_contact_name = ?, emergency_contact_phone = ?, 
-          medical_history = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `);
-    stmt.run(
-      first_name,
-      last_name,
-      date_of_birth || null,
-      phone,
-      email || null,
-      address || null,
-      emergency_contact_name || null,
-      emergency_contact_phone || null,
-      medical_history || null,
-      notes || null,
-      id
-    );
+    const { error } = await supabase
+      .from('patients')
+      .update({
+        first_name,
+        last_name,
+        date_of_birth: date_of_birth || null,
+        phone,
+        email: email || null,
+        address: address || null,
+        emergency_contact_name: emergency_contact_name || null,
+        emergency_contact_phone: emergency_contact_phone || null,
+        medical_history: medical_history || null,
+        notes: notes || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to update patient' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -75,8 +78,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const stmt = db.prepare('DELETE FROM patients WHERE id = ?');
-    stmt.run(id);
+    const { error } = await supabase
+      .from('patients')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to delete patient' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(
   request: NextRequest,
@@ -7,10 +7,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const stmt = db.prepare('SELECT * FROM sessions WHERE id = ?');
-    const session = stmt.get(id) as any;
+    const { data: session, error } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (!session) {
+    if (error || !session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
@@ -39,30 +42,26 @@ export async function PUT(
       payment_date
     } = body;
 
-    const stmt = db.prepare(`
-      UPDATE sessions 
-      SET session_date = COALESCE(?, session_date), 
-          session_type = COALESCE(?, session_type), 
-          status = COALESCE(?, status), 
-          notes = COALESCE(?, notes), 
-          price = COALESCE(?, price), 
-          amount_paid = COALESCE(?, amount_paid), 
-          payment_status = COALESCE(?, payment_status), 
-          payment_date = COALESCE(?, payment_date),
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `);
-    stmt.run(
-      session_date,
-      session_type,
-      status,
-      notes,
-      price,
-      amount_paid,
-      payment_status,
-      payment_date,
-      id
-    );
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    if (session_date !== undefined) updateData.session_date = session_date;
+    if (session_type !== undefined) updateData.session_type = session_type;
+    if (status !== undefined) updateData.status = status;
+    if (notes !== undefined) updateData.notes = notes;
+    if (price !== undefined) updateData.price = price;
+    if (amount_paid !== undefined) updateData.amount_paid = amount_paid;
+    if (payment_status !== undefined) updateData.payment_status = payment_status;
+    if (payment_date !== undefined) updateData.payment_date = payment_date;
+
+    const { error } = await supabase
+      .from('sessions')
+      .update(updateData)
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to update session' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -77,8 +76,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const stmt = db.prepare('DELETE FROM sessions WHERE id = ?');
-    stmt.run(id);
+    const { error } = await supabase
+      .from('sessions')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to delete session' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

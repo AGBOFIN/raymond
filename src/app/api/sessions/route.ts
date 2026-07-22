@@ -1,23 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const patientId = searchParams.get('patientId');
 
-    let stmt;
     let sessions;
 
     if (patientId) {
-      stmt = db.prepare('SELECT * FROM sessions WHERE patient_id = ? ORDER BY session_date DESC');
-      sessions = stmt.all(patientId);
+      const { data } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('patient_id', patientId)
+        .order('session_date', { ascending: false });
+      sessions = data;
     } else {
-      stmt = db.prepare('SELECT s.*, p.first_name, p.last_name FROM sessions s JOIN patients p ON s.patient_id = p.id ORDER BY session_date DESC');
-      sessions = stmt.all();
+      const { data } = await supabase
+        .from('sessions')
+        .select('*, patients(first_name, last_name)')
+        .order('session_date', { ascending: false });
+      sessions = data?.map(s => ({
+        ...s,
+        first_name: s.patients?.first_name,
+        last_name: s.patients?.last_name
+      }));
     }
 
-    return NextResponse.json(sessions);
+    return NextResponse.json(sessions || []);
   } catch (error) {
     console.error('Error fetching sessions:', error);
     return NextResponse.json({ error: 'Failed to fetch sessions' }, { status: 500 });
@@ -43,23 +53,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Patient ID and session date are required' }, { status: 400 });
     }
 
-    const stmt = db.prepare(`
-      INSERT INTO sessions (patient_id, session_date, session_type, status, notes, price, amount_paid, payment_status, payment_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      patient_id,
-      session_date,
-      session_type || null,
-      status || 'planned',
-      notes || null,
-      price || 0,
-      amount_paid || 0,
-      payment_status || 'pending',
-      payment_date || null
-    );
+    const { data, error } = await supabase
+      .from('sessions')
+      .insert({
+        patient_id,
+        session_date,
+        session_type: session_type || null,
+        status: status || 'planned',
+        notes: notes || null,
+        price: price || 0,
+        amount_paid: amount_paid || 0,
+        payment_status: payment_status || 'pending',
+        payment_date: payment_date || null
+      })
+      .select()
+      .single();
 
-    return NextResponse.json({ success: true, id: result.lastInsertRowid });
+    if (error) {
+      return NextResponse.json({ error: 'Failed to create session' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
     console.error('Error creating session:', error);
     return NextResponse.json({ error: 'Failed to create session' }, { status: 500 });

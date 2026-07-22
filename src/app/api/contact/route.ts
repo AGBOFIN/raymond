@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,8 +18,18 @@ export async function POST(request: NextRequest) {
     // Sanitize inputs to prevent XSS
     const sanitize = (input: string) => input.replace(/[<>]/g, '');
     
-    const stmt = db.prepare('INSERT INTO contact_messages (name, phone, email, message) VALUES (?, ?, ?, ?)');
-    stmt.run(sanitize(name), phone ? sanitize(phone) : null, sanitize(email), sanitize(message));
+    const { error } = await supabase
+      .from('contact_messages')
+      .insert({
+        name: sanitize(name),
+        phone: phone ? sanitize(phone) : null,
+        email: sanitize(email),
+        message: sanitize(message)
+      });
+    
+    if (error) {
+      return NextResponse.json({ error: 'Failed to save message' }, { status: 500 });
+    }
     
     return NextResponse.json({ success: true });
   } catch (error) {

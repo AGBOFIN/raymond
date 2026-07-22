@@ -1,72 +1,105 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
     const today = new Date().toISOString().split('T')[0];
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-
-    // Total patients
-    const totalPatientsStmt = db.prepare('SELECT COUNT(*) as count FROM patients');
-    const totalPatients = (totalPatientsStmt.get() as any).count;
-
-    // Sessions completed today
-    const todaySessionsStmt = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE status = ? AND session_date = ?');
-    const todaySessions = (todaySessionsStmt.get('completed', today) as any).count;
-
-    // Sessions completed this month
-    const monthSessionsStmt = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE status = ? AND session_date >= ?');
-    const monthSessions = (monthSessionsStmt.get('completed', monthStart) as any).count;
-
-    // Revenue today (sum of amount_paid for completed sessions today)
-    const todayRevenueStmt = db.prepare('SELECT COALESCE(SUM(amount_paid), 0) as total FROM sessions WHERE payment_status = ? AND payment_date = ?');
-    const todayRevenue = (todayRevenueStmt.get('paid', today) as any).total;
-
-    // Revenue this month
-    const monthRevenueStmt = db.prepare('SELECT COALESCE(SUM(amount_paid), 0) as total FROM sessions WHERE payment_status = ? AND payment_date >= ?');
-    const monthRevenue = (monthRevenueStmt.get('paid', monthStart) as any).total;
-
-    // Sessions by status
-    const sessionsByStatusStmt = db.prepare('SELECT status, COUNT(*) as count FROM sessions GROUP BY status');
-    const sessionsByStatus = sessionsByStatusStmt.all();
-
-    // Pending payments
-    const pendingPaymentsStmt = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE payment_status = ?');
-    const pendingPayments = (pendingPaymentsStmt.get('pending') as any).count;
-
-    // Total pending amount
-    const pendingAmountStmt = db.prepare('SELECT COALESCE(SUM(price - amount_paid), 0) as total FROM sessions WHERE payment_status = ?');
-    const pendingAmount = (pendingAmountStmt.get('pending') as any).total;
-
-    // Recent patients (last 5)
-    const recentPatientsStmt = db.prepare('SELECT id, first_name, last_name, phone, created_at FROM patients ORDER BY created_at DESC LIMIT 5');
-    const recentPatients = recentPatientsStmt.all();
-
-    // Upcoming sessions (next 7 days)
     const upcomingDate = new Date();
     upcomingDate.setDate(upcomingDate.getDate() + 7);
     const upcomingDateStr = upcomingDate.toISOString().split('T')[0];
-    
-    const upcomingSessionsStmt = db.prepare(`
-      SELECT s.*, p.first_name, p.last_name 
-      FROM sessions s 
-      JOIN patients p ON s.patient_id = p.id 
-      WHERE s.session_date >= ? AND s.session_date <= ? AND s.status = 'planned'
-      ORDER BY s.session_date ASC
-    `);
-    const upcomingSessions = upcomingSessionsStmt.all(today, upcomingDateStr);
+
+    // Total patients
+    const { count: totalPatients } = await supabase
+      .from('patients')
+      .select('*', { count: 'exact', head: true });
+
+    // Sessions completed today
+    const { count: todaySessions } = await supabase
+      .from('sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'completed')
+      .eq('session_date', today);
+
+    // Sessions completed this month
+    const { count: monthSessions } = await supabase
+      .from('sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'completed')
+      .gte('session_date', monthStart);
+
+    // Revenue today
+    const { data: todayRevenueData } = await supabase
+      .from('sessions')
+      .select('amount_paid')
+      .eq('payment_status', 'paid')
+      .eq('payment_date', today);
+    const todayRevenue = todayRevenueData?.reduce((sum, s) => sum + (Number(s.amount_paid) || 0), 0) || 0;
+
+    // Revenue this month
+    const { data: monthRevenueData } = await supabase
+      .from('sessions')
+      .select('amount_paid')
+      .eq('payment_status', 'paid')
+      .gte('payment_date', monthStart);
+    const monthRevenue = monthRevenueData?.reduce((sum, s) => sum + (Number(s.amount_paid) || 0), 0) || 0;
+
+    // Sessions by status
+    const { data: sessionsByStatus } = await supabase
+      .from('sessions')
+      .select('status');
+
+    const statusCounts = sessionsByStatus?.reduce((acc: any, s) => {
+      acc[s.status] = (acc[s.status] || 0) + 1;
+      return acc;
+    }, {}) || {};
+
+    const sessionsByStatusArray = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
+
+    // Pending payments
+    const { count: pendingPayments } = await supabase
+      .from('sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('payment_status', 'pending');
+
+    // Total pending amount
+    const { data: pendingAmountData } = await supabase
+      .from('sessions')
+      .select('price, amount_paid')
+      .eq('payment_status', 'pending');
+    const pendingAmount = pendingAmountData?.reduce((sum, s) => sum + (Number(s.price) - Number(s.amount_paid)), 0) || 0;
+
+    // Recent patients (last 5)
+    const { data: recentPatients } = await supabase
+      .from('patients')
+      .select('id, first_name, last_name, phone, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    // Upcoming sessions (next 7 days)
+    const { data: upcomingSessions } = await supabase
+      .from('sessions')
+      .select('*, patients(first_name, last_name)')
+      .gte('session_date', today)
+      .lte('session_date', upcomingDateStr)
+      .eq('status', 'planned')
+      .order('session_date', { ascending: true });
 
     return NextResponse.json({
-      totalPatients,
-      todaySessions,
-      monthSessions,
+      totalPatients: totalPatients || 0,
+      todaySessions: todaySessions || 0,
+      monthSessions: monthSessions || 0,
       todayRevenue,
       monthRevenue,
-      sessionsByStatus,
-      pendingPayments,
+      sessionsByStatus: sessionsByStatusArray,
+      pendingPayments: pendingPayments || 0,
       pendingAmount,
-      recentPatients,
-      upcomingSessions
+      recentPatients: recentPatients || [],
+      upcomingSessions: upcomingSessions?.map(s => ({
+        ...s,
+        first_name: s.patients?.first_name,
+        last_name: s.patients?.last_name
+      })) || []
     });
   } catch (error) {
     console.error('Error fetching statistics:', error);

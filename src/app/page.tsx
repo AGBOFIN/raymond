@@ -7,31 +7,33 @@ import Gallery from '@/components/Gallery';
 import Testimonials from '@/components/Testimonials';
 import Contact from '@/components/Contact';
 import Footer from '@/components/Footer';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export default async function Home() {
-  // Fetch content directly from database
+  // Fetch content from Supabase
   let content = {};
   try {
-    const stmt = db.prepare('SELECT key, value FROM site_content');
-    const contentRows = stmt.all();
-    content = contentRows.reduce((acc: Record<string, string>, row: any) => {
+    const { data: contentData } = await supabase
+      .from('site_content')
+      .select('key, value');
+    content = contentData?.reduce((acc: Record<string, string>, row) => {
       acc[row.key] = row.value;
       return acc;
-    }, {});
+    }, {}) || {};
   } catch (error) {
     console.error('Error fetching content:', error);
-    // Fallback to empty object
   }
 
-  // Fetch services directly from database
+  // Fetch services from Supabase
   let services: any[] = [];
   try {
-    const stmt = db.prepare('SELECT * FROM services ORDER BY order_index');
-    services = stmt.all();
+    const { data: servicesData } = await supabase
+      .from('services')
+      .select('*')
+      .order('order_index');
+    services = servicesData || [];
   } catch (error) {
     console.error('Error fetching services:', error);
-    // Fallback to empty array
   }
 
   return (
