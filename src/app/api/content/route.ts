@@ -18,7 +18,12 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Error fetching content:', error);
-    return NextResponse.json({ error: 'Failed to fetch content' }, { status: 500 });
+    // Return empty object instead of error to prevent crashes
+    return NextResponse.json({}, {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+    });
   }
 }
 

@@ -13,7 +13,12 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Error fetching services:', error);
-    return NextResponse.json({ error: 'Failed to fetch services' }, { status: 500 });
+    // Return empty array instead of error to prevent crashes
+    return NextResponse.json([], {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+    });
   }
 }
 

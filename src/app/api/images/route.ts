@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error('Error fetching images:', error);
-    return NextResponse.json({ error: 'Failed to fetch images' }, { status: 500 });
+    // Return empty array instead of error to prevent crashes
+    return NextResponse.json([]);
   }
 }
 
