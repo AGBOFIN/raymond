@@ -215,14 +215,6 @@ export default function Contact({ content }: { content: any }) {
                 </div>
               </div>
             </div>
-
-            {/* Map Placeholder */}
-            <div className="bg-gray-200 h-64 rounded-2xl flex items-center justify-center">
-              <div className="text-center text-gray-500">
-                <MapPin className="w-12 h-12 mx-auto mb-2" />
-                <p>Carte interactive</p>
-              </div>
-            </div>
           </motion.div>
         </div>
       </div>
