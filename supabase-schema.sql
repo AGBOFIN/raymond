@@ -172,7 +172,7 @@ CREATE POLICY "Public read access for site_content" ON site_content FOR SELECT U
 CREATE POLICY "Public read access for services" ON services FOR SELECT USING (true);
 CREATE POLICY "Public read access for images" ON images FOR SELECT USING (true);
 CREATE POLICY "Public read access for gallery" ON gallery FOR SELECT USING (true);
-CREATE POLICY "Public read access for testimonials" ON testimonials FOR SELECT USING (true) WITH CHECK (is_approved = true);
+CREATE POLICY "Public read access for testimonials" ON testimonials FOR SELECT USING (is_approved = true);
 
 -- Admin-only policies (you'll need to implement proper authentication)
 CREATE POLICY "Admin full access on site_content" ON site_content FOR ALL USING (auth.role() = 'authenticated');
