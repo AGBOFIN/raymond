@@ -6,14 +6,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { username, password } = body;
-    
+
     console.log('Login attempt for username:', username);
-    
+
     if (!username || !password) {
       console.log('Missing username or password');
       return NextResponse.json({ error: 'Nom d\'utilisateur et mot de passe requis' }, { status: 400 });
     }
-    
+
+    if (!db) {
+      return NextResponse.json({ error: 'Base de données non configurée' }, { status: 500 });
+    }
+
     const stmt = db.prepare('SELECT * FROM admin_users WHERE username = ?');
     const user = stmt.get(username) as any;
     
